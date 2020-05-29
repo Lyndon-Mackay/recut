@@ -1,10 +1,19 @@
 use io::Read;
 use std::{fs, io};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum IoType {
     FromStdIn,
     FromFile(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum CutType {
+    Bytes(String),
+    Characters(String),
+    FieldsInferDelimiter(String),
+    FieldsRegexDelimiter(String, String),
+    FieldsStringDelimiter(String, String),
 }
 
 pub fn cut(input: IoType) -> Result<(), io::ErrorKind> {
@@ -33,3 +42,5 @@ pub fn cut(input: IoType) -> Result<(), io::ErrorKind> {
     println!("{}", contents);
     Ok(())
 }
+
+fn CreateRanges() {}

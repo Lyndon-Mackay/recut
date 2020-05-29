@@ -26,7 +26,7 @@ fn main() {
             .value_name("LIST")
             .takes_value(true)
         )
-        .group(ArgGroup::with_name("RANGE").
+        .group(ArgGroup::with_name("Range").
             args(&["Bytes","Characters","Fields"])
             .required(true)
         )
@@ -39,7 +39,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("Split")
-            .short("S")
+            .short("s")
             .takes_value(true)
             .requires("Fields")
             .help("Like D but for string literals only,fields option (-f) must be used.")
@@ -67,12 +67,39 @@ fn main() {
         \nReptitions are allowed and will be sent to STDIO")
         .get_matches();
 
-        let input_type = match matches.value_of("FILE") {
-            Some(s) if s != "-" && s != "--"=> {
-                IoType::FromFile(s.to_owned())
-            }
-            _ => { IoType::FromStdIn}
-        };
+    let input_type = match matches.value_of("FILE") {
+        Some(s) if s != "-" && s != "--" => IoType::FromFile(s.to_owned()),
+        _ => IoType::FromStdIn,
+    };
+    let cut_type = matches
+        .value_of("Bytes")
+        .map(|x| CutType::Bytes(x.to_string()))
+        .or_else(|| {
+            matches
+                .value_of("Characters")
+                .map(|x| CutType::Characters(x.to_string()))
+        })
+        .or_else(|| {
+            matches
+                .value_of("Fields")
+                .map(|x| CutType::FieldsInferDelimiter(x.to_string()))
+        })
+        .unwrap();
 
-        cut(input_type);
+    let cut_type = match cut_type {
+        CutType::FieldsInferDelimiter(x) => {
+            if let Some(s) = matches.value_of("Delimiter") {
+                CutType::FieldsRegexDelimiter(x, s.to_string())
+            } else if let Some(s) = matches.value_of("Split") {
+                CutType::FieldsStringDelimiter(x, s.to_string())
+            } else {
+                CutType::FieldsInferDelimiter(x)
+            }
+        }
+        x => x,
+    };
+
+    println!("{:?} ", cut_type);
+
+    cut(input_type);
 }
