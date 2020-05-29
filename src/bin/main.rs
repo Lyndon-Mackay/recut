@@ -1,5 +1,7 @@
 extern crate clap;
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg, ArgGroup};
+use recut::*;
+
 fn main() {
     let matches = App::new("Recut")
         .version("0.1")
@@ -17,26 +19,36 @@ fn main() {
                 .help("Specifies a range of characters which will be returned. e.g c20:-2,25, will print from the first 20 characters to until the second to last character, followed by the 25th character")
                 .takes_value(true)
                 .value_name("LIST")
-                .conflicts_with("Bytes")
         ).arg(
             Arg::with_name("Fields")
             .short("f")
             .help("Specifies a field list to output e.g 3:-2,1  outputs 3 field until second to last field followed by the first field")
+            .value_name("LIST")
             .takes_value(true)
-            .conflicts_with("Bytes")
-            .conflicts_with("Characters")
+        )
+        .group(ArgGroup::with_name("RANGE").
+            args(&["Bytes","Characters","Fields"])
+            .required(true)
         )
         .arg(
             Arg::with_name("Delimiter")
             .short("d")
+            .takes_value(true)
             .requires("Fields")
-            .help("Delimiter regex which to read the input ,fields option (-f) must be used.\n 
-            If not present an attempt will be made to infer the delimiter")
+            .help(r#"Delimiter regex which to read the input ,fields option (-f) must be used. If not present an attempt will be made to infer the delimiter"#)
         )
+        .arg(
+            Arg::with_name("Split")
+            .short("S")
+            .takes_value(true)
+            .requires("Fields")
+            .help("Like D but for string literals only,fields option (-f) must be used.")
+            .conflicts_with("Delimiter")
+        ) 
         .arg(
             Arg::with_name("No split of multibyte characters")
             .short("n")
-            .help("prevents splitting of character bytes when -b i used")
+            .help("Prevents splitting of character bytes when -b i used")
             .requires("Bytes")
         ).arg(
             Arg::with_name("FILE")
@@ -54,4 +66,13 @@ fn main() {
         \nOut is in the same manner as list is input
         \nReptitions are allowed and will be sent to STDIO")
         .get_matches();
+
+        let input_type = match matches.value_of("FILE") {
+            Some(s) if s != "-" && s != "--"=> {
+                IoType::FromFile(s.to_owned())
+            }
+            _ => { IoType::FromStdIn}
+        };
+
+        cut(input_type);
 }
