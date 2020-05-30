@@ -22,7 +22,7 @@ fn main() {
         ).arg(
             Arg::with_name("Fields")
             .short("f")
-            .help("Specifies a field list to output e.g 3:-2,1  outputs 3 field until second to last field followed by the first field")
+            .help("Specifies a field list to output e.g 3:-2,0  outputs 3 field until second to last field followed by the first field")
             .value_name("LIST")
             .takes_value(true)
         )
