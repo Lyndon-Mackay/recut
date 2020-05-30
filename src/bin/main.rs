@@ -1,6 +1,7 @@
 extern crate clap;
 use clap::{App, Arg, ArgGroup};
 use recut::*;
+use regex::RegexSet;
 
 fn main() {
     let matches = App::new("Recut")
@@ -11,7 +12,8 @@ fn main() {
                 .short("b")
                 .value_name("LIST")
                 .help("Specifies a range of bytes to be returned. e.g b20:-2,25, will print from the first 20 bytes to until the second to last byte, followed by the 25th byte")
-                .takes_value(true),
+                .takes_value(true)
+                .validator(check_formatted_lists)
         )
         .arg(
             Arg::with_name("Characters")
@@ -19,12 +21,14 @@ fn main() {
                 .help("Specifies a range of characters which will be returned. e.g c20:-2,25, will print from the first 20 characters to until the second to last character, followed by the 25th character")
                 .takes_value(true)
                 .value_name("LIST")
+                .validator(check_formatted_lists)
         ).arg(
             Arg::with_name("Fields")
             .short("f")
             .help("Specifies a field list to output e.g 3:-2,0  outputs 3 field until second to last field followed by the first field")
             .value_name("LIST")
             .takes_value(true)
+            .validator(check_formatted_lists)
         )
         .group(ArgGroup::with_name("Range").
             args(&["Bytes","Characters","Fields"])
@@ -102,4 +106,28 @@ fn main() {
     println!("{:?} ", cut_type);
 
     cut(input_type);
+}
+/**
+Uses a few regexes to get rid of the most obvious errors full parsing done later
+*/
+fn check_formatted_lists(input:String)-> Result<(),String>{
+    let fail_conditions = RegexSet::new(&[
+        r"[^-:,\d]",
+        r"-\D",
+        r"(-|,)$",
+        r":[^,]*:",
+        r"-[^,:]*-",
+
+    ]).unwrap();
+
+    // Iterate over and collect all of the matches.
+    let failures: Vec<_> = fail_conditions.matches(&input).into_iter().collect();
+
+    if failures.is_empty(){
+        Ok(())
+    }
+    else{
+        Err(String::from("Invalid List please use the help option for details on accetped lists"))
+    }
+
 }
