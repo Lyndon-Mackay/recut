@@ -67,7 +67,7 @@ fn main() {
         \nSeperated by commas.
         \nNegative values are used to navigate from tail of the list.
         \nOmitted indeces either side of a colon are infered to be 0 (left missing) or -1 (right missing)
-        \nOut is in the same manner as list is input
+        \nOutput is in the same manner as list is input
         \nReptitions are allowed and will be sent to STDIO")
         .get_matches();
 
