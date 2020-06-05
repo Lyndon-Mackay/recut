@@ -3,6 +3,7 @@ use clap::{App, Arg, ArgGroup};
 use recut::*;
 use regex::RegexSet;
 
+
 fn main() {
     let matches = App::new("Recut")
         .version("0.1")

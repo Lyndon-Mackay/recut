@@ -1,0 +1,7 @@
+digit = _{ '0'..'9' }
+number = {  "-"? ~ digit+}
+to_end = {""}
+from_start = {""}
+range =  {number ~ ":" ~ number | number ~ ":"~ to_end | from_start ~ ":" ~ number  |number }
+indices = _{range ~ ("," ~range)*} 
+list = _{SOI ~ indices ~ &EOI }

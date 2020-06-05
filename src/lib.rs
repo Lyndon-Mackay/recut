@@ -1,5 +1,16 @@
+extern crate pest;
+
 use io::Read;
 use std::{error, fmt, fs, io, num::ParseIntError};
+
+#[macro_use]
+extern crate pest_derive;
+
+use pest::{iterators::Pairs, Parser};
+
+#[derive(Parser)]
+#[grammar = "list.pest"]
+pub struct ListParser;
 
 #[derive(Clone, Debug)]
 pub enum IoType {
@@ -16,9 +27,19 @@ pub enum CutType {
     FieldsStringDelimiter(String, String),
 }
 
-enum UnParsedPosition {
+enum BeginRange {
+    Index(i32),
+    FromStart,
+}
+
+enum EndRange {
+    Index(i32),
+    ToEnd,
+}
+
+enum UnExpandedIndices {
     Index(String),
-    Range(String, String),
+    Range(BeginRange, EndRange),
 }
 
 #[derive(Clone, Debug)]
@@ -69,17 +90,46 @@ pub fn cut(input: IoType) -> Result<(), io::ErrorKind> {
         }
     };
 
-    let contents = match contents {
-        Ok(s) => s,
-        Err(e) => return Err(e.kind()),
-    };
+    parse_indices("-1:9,-19:-1,4:,:15,3,-2,9:");
 
     Ok(())
 }
 
-/**
+fn parse_indices(input: &str) -> Vec<UnExpandedIndices> {
+    let parse = ListParser::parse(Rule::list, input).expect("unsuccessful parse");
+
+    parse
+        .into_iter()
+        .map(|parse_pair| {
+            let range: Vec<_> = parse_pair.into_inner().map(|x| x.as_str()).collect();
+
+            match range.as_slice() {
+                [index] => UnExpandedIndices::Index(index.parse().unwrap()),
+                [begin, end] if begin == &"" && end == &"" => {
+                    UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd)
+                }
+                [begin, end] if begin == &"" => UnExpandedIndices::Range(
+                    BeginRange::FromStart,
+                    EndRange::Index(end.parse().unwrap()),
+                ),
+                [begin, end] if end == &"" => UnExpandedIndices::Range(
+                    BeginRange::Index(begin.parse().unwrap()),
+                    EndRange::ToEnd,
+                ),
+                [begin, end] => UnExpandedIndices::Range(
+                    BeginRange::Index(begin.parse().unwrap()),
+                    EndRange::Index(end.parse().unwrap()),
+                ),
+                _ => unreachable!(),
+            }
+        })
+        .collect()
+}
+
+/*
     Returns a list of indices or the first parsing or range error encountered
 */
+/*
 fn generate_indices(input: &str) -> Result<Vec<i8>, RangeParseError> {
     let unexpanded_ranges = input.split(",");
 
@@ -132,4 +182,4 @@ fn generate_indices(input: &str) -> Result<Vec<i8>, RangeParseError> {
             .flat_map(|v| v)
             .collect::<Vec<i8>>()),
     }
-}
+}*/
