@@ -51,7 +51,7 @@ fn main() {
             .conflicts_with("Delimiter")
         ) 
         .arg(
-            Arg::with_name("No split of multibyte characters")
+            Arg::with_name("NoMultiByteSplit")
             .short("n")
             .help("Prevents splitting of character bytes when -b i used")
             .requires("Bytes")
@@ -76,9 +76,10 @@ fn main() {
         Some(s) if s != "-" && s != "--" => IoType::FromFile(s.to_owned()),
         _ => IoType::FromStdIn,
     };
+
     let cut_type = matches
         .value_of("Bytes")
-        .map(|x| CutType::Bytes(x.to_string()))
+        .map(|x| CutType::Bytes(x.to_string(),matches.is_present("NoMultiByteSplit")))
         .or_else(|| {
             matches
                 .value_of("Characters")
@@ -100,13 +101,13 @@ fn main() {
             } else {
                 CutType::FieldsInferDelimiter(x)
             }
-        }
+        },
         x => x,
     };
 
     println!("{:?} ", cut_type);
 
-    cut(input_type);
+    cut(input_type,cut_type);
 }
 /**
 Uses a few regexes to get rid of the most obvious errors full parsing done later

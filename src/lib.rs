@@ -1,7 +1,7 @@
 extern crate pest;
 
 use io::Read;
-use std::{error, fmt, fs, io, num::ParseIntError};
+use std::{collections::HashMap, error, fmt, fs, io, num::ParseIntError};
 
 #[macro_use]
 extern crate pest_derive;
@@ -20,7 +20,7 @@ pub enum IoType {
 
 #[derive(Clone, Debug)]
 pub enum CutType {
-    Bytes(String),
+    Bytes(String, bool),
     Characters(String),
     FieldsInferDelimiter(String),
     FieldsRegexDelimiter(String, String),
@@ -38,20 +38,31 @@ enum EndRange {
 }
 
 enum UnExpandedIndices {
-    Index(String),
+    Index(i32),
     Range(BeginRange, EndRange),
 }
 
 #[derive(Clone, Debug)]
 enum RangeParseError {
     IntError(ParseIntError),
-    RangeError(i8, i8),
+}
+
+impl CutType {
+    fn ranges(&self) -> &str {
+        match self {
+            CutType::Bytes(s, _) => s,
+            CutType::Characters(s) => s,
+            CutType::FieldsInferDelimiter(s) => s,
+            CutType::FieldsRegexDelimiter(s, _) => s,
+            CutType::FieldsStringDelimiter(s, _) => s,
+        }
+    }
 }
 
 impl fmt::Display for RangeParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            RangeParseError::RangeError(i, j) => write!(f, "{} should be less then {}", i, j),
+            //RangeParseError::RangeError(i, j) => write!(f, "{} should be less then {}", i, j),
             // This is a wrapper, so defer to the underlying types' implementation of `fmt`.
             RangeParseError::IntError(ref e) => e.fmt(f),
         }
@@ -62,7 +73,7 @@ impl error::Error for RangeParseError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
             RangeParseError::IntError(ref e) => Some(e),
-            RangeParseError::RangeError(_, _) => None,
+            //RangeParseError::RangeError(_, _) => None,
         }
     }
 }
@@ -72,7 +83,7 @@ impl From<ParseIntError> for RangeParseError {
     }
 }
 
-pub fn cut(input: IoType) -> Result<(), io::ErrorKind> {
+pub fn cut(input: IoType, cut_type: CutType) -> Result<(), io::ErrorKind> {
     let contents = match input {
         IoType::FromFile(filename) => match fs::read_to_string(filename) {
             Ok(s) => Ok(s),
@@ -88,98 +99,116 @@ pub fn cut(input: IoType) -> Result<(), io::ErrorKind> {
                 },
             }
         }
-    };
+    }
+    .unwrap();
 
-    parse_indices("-1:9,-19:-1,4:,:15,3,-2,9:");
+    let parsed_indices = parse_indices(cut_type.ranges()).unwrap();
+
+    match cut_type {
+        CutType::Bytes(_, _) => {}
+        CutType::Characters(_) => print_by_character(&contents, parsed_indices),
+        CutType::FieldsInferDelimiter(_) => {}
+        CutType::FieldsRegexDelimiter(_, _) => {}
+        CutType::FieldsStringDelimiter(_, _) => {}
+    }
 
     Ok(())
 }
 
-fn parse_indices(input: &str) -> Vec<UnExpandedIndices> {
-    let parse = ListParser::parse(Rule::list, input).expect("unsuccessful parse");
+/**
+Attempts to pass the list argument if sucessfull it then converts the indices to numbers
+and creates and generates a vecor of type  UnExpandedIndices
+*/
 
-    parse
-        .into_iter()
-        .map(|parse_pair| {
-            let range: Vec<_> = parse_pair.into_inner().map(|x| x.as_str()).collect();
+/* TODO add range errors */
+fn parse_indices(
+    input: &str,
+) -> std::result::Result<Vec<UnExpandedIndices>, pest::error::Error<Rule>> {
+    /* Mao to act on sucessfull case transfroms parse into  */
+    ListParser::parse(Rule::list, input).map(|parse| {
+        parse
+            .into_iter()
+            .map(|parse_pair| {
+                let range: Vec<_> = parse_pair.into_inner().map(|x| x.as_str()).collect();
 
-            match range.as_slice() {
-                [index] => UnExpandedIndices::Index(index.parse().unwrap()),
-                [begin, end] if begin == &"" && end == &"" => {
-                    UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd)
+                match range.as_slice() {
+                    [index] => UnExpandedIndices::Index(index.parse().unwrap()),
+                    [begin, end] if begin == &"" && end == &"" => {
+                        UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd)
+                    }
+                    [begin, end] if begin == &"" => UnExpandedIndices::Range(
+                        BeginRange::FromStart,
+                        EndRange::Index(end.parse().unwrap()),
+                    ),
+                    [begin, end] if end == &"" => UnExpandedIndices::Range(
+                        BeginRange::Index(begin.parse().unwrap()),
+                        EndRange::ToEnd,
+                    ),
+                    [begin, end] => UnExpandedIndices::Range(
+                        BeginRange::Index(begin.parse().unwrap()),
+                        EndRange::Index(end.parse().unwrap()),
+                    ),
+                    _ => unreachable!(),
                 }
-                [begin, end] if begin == &"" => UnExpandedIndices::Range(
-                    BeginRange::FromStart,
-                    EndRange::Index(end.parse().unwrap()),
-                ),
-                [begin, end] if end == &"" => UnExpandedIndices::Range(
-                    BeginRange::Index(begin.parse().unwrap()),
-                    EndRange::ToEnd,
-                ),
-                [begin, end] => UnExpandedIndices::Range(
-                    BeginRange::Index(begin.parse().unwrap()),
-                    EndRange::Index(end.parse().unwrap()),
-                ),
-                _ => unreachable!(),
-            }
-        })
-        .collect()
+            })
+            .collect()
+    })
 }
 
-/*
-    Returns a list of indices or the first parsing or range error encountered
-*/
-/*
-fn generate_indices(input: &str) -> Result<Vec<i8>, RangeParseError> {
-    let unexpanded_ranges = input.split(",");
+fn print_by_character(input: &str, input_indices: Vec<UnExpandedIndices>) {
+    let length = input.chars().count();
 
-    let unparsed_ranges: Vec<UnParsedPosition> = unexpanded_ranges
-        .map(|s| {
-            if s.contains(":") {
-                let ranges: Vec<String> = s.splitn(2, ":").map(|v| v.to_string()).collect();
-                UnParsedPosition::Range(ranges[0].clone(), ranges[1].clone())
-            } else {
-                UnParsedPosition::Index(s.to_string())
-            }
-        })
-        .collect();
+    // like moduluo  but number wraped  around index for negative numbers
+    let tn = |num: i32| {
+        if num >= 0 {
+            num as usize
+        } else {
+            length - num as usize
+        }
+    };
 
-    let parsed_expanded_ranges: Vec<Result<Vec<i8>, RangeParseError>> = unparsed_ranges
+    let expanded_indices: Vec<_> = input_indices
         .into_iter()
-        .map(|s| match s {
-            UnParsedPosition::Index(x) => match x.parse::<i8>() {
-                Ok(num) => Ok(vec![num]),
-                Err(x) => Err(RangeParseError::IntError(x)),
-            },
-            UnParsedPosition::Range(x, y) => {
-                let x = x.parse::<i8>();
-                let y = y.parse::<i8>();
-
-                match (x, y) {
-                    (Ok(i), Ok(j)) => {
-                        if i < j {
-                            Ok((i..j).into_iter().collect())
-                        } else {
-                            Err(RangeParseError::RangeError(i, j))
-                        }
-                    }
-                    (Ok(_), Err(err)) => Err(RangeParseError::IntError(err)),
-                    (Err(err), Ok(_)) => Err(RangeParseError::IntError(err)),
-                    (Err(err), Err(_)) => Err(RangeParseError::IntError(err)),
-                }
+        .flat_map(|range| match range {
+            UnExpandedIndices::Index(num) => vec![num as usize],
+            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd) => {
+                (0..=length).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::Index(num)) => {
+                (0..=tn(num)).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::Index(num), EndRange::ToEnd) => {
+                (tn(num)..=length).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::Index(begin_num), EndRange::Index(end_num)) => {
+                (tn(begin_num)..=tn(end_num)).collect()
             }
         })
         .collect();
 
-    match parsed_expanded_ranges.iter().find(|x| x.is_err()) {
-        Some(err) => Err(err.clone().unwrap_err()),
-        None => Ok(parsed_expanded_ranges
-            .into_iter()
-            .filter_map(|x| match x {
-                Ok(y) => Some(y),
-                Err(_) => None,
-            })
-            .flat_map(|v| v)
-            .collect::<Vec<i8>>()),
+    let mut sorted_indcies = expanded_indices.clone();
+    sorted_indcies.sort();
+
+    let first_index = *sorted_indcies.first().unwrap();
+
+    let last_index = *sorted_indcies.last().unwrap();
+
+    let enumerated_lines = input.lines().map(|line| {
+        line.chars()
+            .skip(first_index)
+            .take(last_index)
+            .enumerate()
+            .map(|(i, c)| (i + first_index, c))
+            .collect::<HashMap<_, _>>()
+    });
+
+    for line in enumerated_lines {
+        let mut print_string = String::new();
+
+        for print_index in &expanded_indices {
+            print_string.push(*line.get(print_index).unwrap());
+        }
+
+        println!("{}", print_string);
     }
-}*/
+}
