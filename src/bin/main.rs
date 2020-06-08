@@ -79,7 +79,7 @@ fn main() {
 
     let cut_type = matches
         .value_of("Bytes")
-        .map(|x| CutType::Bytes(x.to_string(),matches.is_present("NoMultiByteSplit")))
+        .map(|x| CutType::Bytes(x.to_string(),!matches.is_present("NoMultiByteSplit")))
         .or_else(|| {
             matches
                 .value_of("Characters")
