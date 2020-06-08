@@ -1,11 +1,12 @@
 extern crate pest;
 
-use io::Read;
+use io::{BufRead, BufReader, Read};
 use std::{collections::HashMap, error, fmt, fs, io, num::ParseIntError};
 
 #[macro_use]
 extern crate pest_derive;
 
+use fs::File;
 use pest::{iterators::Pairs, Parser};
 
 #[derive(Parser)]
@@ -84,29 +85,11 @@ impl From<ParseIntError> for RangeParseError {
 }
 
 pub fn cut(input: IoType, cut_type: CutType) -> Result<(), io::ErrorKind> {
-    let contents = match input {
-        IoType::FromFile(filename) => match fs::read_to_string(filename) {
-            Ok(s) => Ok(s),
-            Err(e) => Err(e),
-        },
-        IoType::FromStdIn => {
-            let mut io_string = String::new();
-            match io::stdin().read_to_string(&mut io_string) {
-                Ok(_) => Ok(io_string),
-                Err(e) => match e.kind() {
-                    io::ErrorKind::BrokenPipe => Ok(io_string),
-                    _ => Err(e),
-                },
-            }
-        }
-    }
-    .unwrap();
-
     let parsed_indices = parse_indices(cut_type.ranges()).unwrap();
 
     match cut_type {
         CutType::Bytes(_, _) => {}
-        CutType::Characters(_) => print_by_character(&contents, parsed_indices),
+        CutType::Characters(_) => print_by_character(input, parsed_indices),
         CutType::FieldsInferDelimiter(_) => {}
         CutType::FieldsRegexDelimiter(_, _) => {}
         CutType::FieldsStringDelimiter(_, _) => {}
@@ -155,8 +138,27 @@ fn parse_indices(
     })
 }
 
-fn print_by_character(input: &str, input_indices: Vec<UnExpandedIndices>) {
-    let length = input.chars().count();
+fn print_by_character(io_type: IoType, input_indices: Vec<UnExpandedIndices>) {
+    match io_type {
+        IoType::FromStdIn => {
+            for line in io::stdin().lock().lines() {
+                print_line_by_character(&line.unwrap(), &input_indices)
+            }
+        }
+        IoType::FromFile(file_name) => {
+            let file = File::open(file_name).unwrap();
+
+            let reader = BufReader::new(file);
+
+            for line in reader.lines() {
+                print_line_by_character(&line.unwrap(), &input_indices);
+            }
+        }
+    }
+}
+
+fn print_line_by_character(input_line: &str, input_indices: &[UnExpandedIndices]) {
+    let length = input_line.chars().count();
 
     // like moduluo  but number wraped  around index for negative numbers
     let tn = |num: i32| {
@@ -170,45 +172,38 @@ fn print_by_character(input: &str, input_indices: Vec<UnExpandedIndices>) {
     let expanded_indices: Vec<_> = input_indices
         .into_iter()
         .flat_map(|range| match range {
-            UnExpandedIndices::Index(num) => vec![num as usize],
+            UnExpandedIndices::Index(num) => vec![*num as usize],
             UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd) => {
                 (0..=length).collect()
             }
             UnExpandedIndices::Range(BeginRange::FromStart, EndRange::Index(num)) => {
-                (0..=tn(num)).collect()
+                (0..=tn(*num)).collect()
             }
             UnExpandedIndices::Range(BeginRange::Index(num), EndRange::ToEnd) => {
-                (tn(num)..=length).collect()
+                (tn(*num)..=length).collect()
             }
             UnExpandedIndices::Range(BeginRange::Index(begin_num), EndRange::Index(end_num)) => {
-                (tn(begin_num)..=tn(end_num)).collect()
+                (tn(*begin_num)..=tn(*end_num)).collect()
             }
         })
         .collect();
 
-    let mut sorted_indcies = expanded_indices.clone();
-    sorted_indcies.sort();
+    let mut sorted_indices = expanded_indices.clone();
+    sorted_indices.sort();
 
-    let first_index = *sorted_indcies.first().unwrap();
+    let first_index = *sorted_indices.first().unwrap();
 
-    let last_index = *sorted_indcies.last().unwrap();
+    let last_index = *sorted_indices.last().unwrap();
 
-    let enumerated_lines = input.lines().map(|line| {
-        line.chars()
-            .skip(first_index)
-            .take(last_index)
-            .enumerate()
-            .map(|(i, c)| (i + first_index, c))
-            .collect::<HashMap<_, _>>()
-    });
+    let char_map = input_line
+        .char_indices()
+        .skip(first_index)
+        .take(last_index)
+        .collect::<HashMap<_, _>>();
 
-    for line in enumerated_lines {
-        let mut print_string = String::new();
-
-        for print_index in &expanded_indices {
-            print_string.push(*line.get(print_index).unwrap());
-        }
-
-        println!("{}", print_string);
+    let mut print_string = String::new();
+    for print_index in &expanded_indices {
+        print_string.push(*char_map.get(print_index).unwrap());
     }
+    println!("{}", print_string);
 }
