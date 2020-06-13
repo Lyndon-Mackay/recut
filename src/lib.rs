@@ -8,6 +8,7 @@ extern crate pest_derive;
 
 use fs::File;
 use pest::{iterators::Pairs, Parser};
+use regex::Regex;
 
 #[derive(Parser)]
 #[grammar = "list.pest"]
@@ -91,7 +92,9 @@ pub fn cut(input: IoType, cut_type: CutType) -> Result<(), io::ErrorKind> {
         CutType::Bytes(_, split) => print_by_bytes(input, split, parsed_indices),
         CutType::Characters(_) => print_by_character(input, parsed_indices),
         CutType::FieldsInferDelimiter(_) => {}
-        CutType::FieldsRegexDelimiter(_, _) => {}
+        CutType::FieldsRegexDelimiter(_, delimiter) => {
+            print_by_regex(input, &delimiter, parsed_indices)
+        }
         CutType::FieldsStringDelimiter(_, delimiter) => {
             print_by_string_delimiter(input, &delimiter, parsed_indices)
         }
@@ -374,4 +377,85 @@ fn print_line_by_string_delimiter(
     }
 
     println!("{}", print_string.join(delimiter));
+}
+
+fn print_by_regex(io_type: IoType, delimiter: &str, input_indices: Vec<UnExpandedIndices>) {
+    let regex_delim = Regex::new(delimiter).unwrap();
+
+    match io_type {
+        IoType::FromStdIn => {
+            for line in io::stdin().lock().lines() {
+                print_line_by_regex_delimiter(&line.unwrap(), &regex_delim, &input_indices)
+            }
+        }
+        IoType::FromFile(file_name) => {
+            let file = File::open(file_name).unwrap();
+
+            let reader = BufReader::new(file);
+
+            for line in reader.lines() {
+                print_line_by_regex_delimiter(&line.unwrap(), &regex_delim, &input_indices)
+            }
+        }
+    }
+}
+fn print_line_by_regex_delimiter(
+    input_line: &str,
+    regex_delim: &Regex,
+    input_indices: &[UnExpandedIndices],
+) {
+    let split_line: Vec<_> = regex_delim.split(input_line).collect();
+
+    let length = split_line.len();
+
+    // like moduluo  but number wraped  around index for negative numbers
+    let tn = |num: i32| {
+        if num >= 0 {
+            num as usize
+        } else {
+            length - num as usize
+        }
+    };
+
+    let expanded_indices: Vec<_> = input_indices
+        .into_iter()
+        .flat_map(|range| match range {
+            UnExpandedIndices::Index(num) => vec![*num as usize],
+            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd) => {
+                (0..=length).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::Index(num)) => {
+                (0..=tn(*num)).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::Index(num), EndRange::ToEnd) => {
+                (tn(*num)..=length).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::Index(begin_num), EndRange::Index(end_num)) => {
+                (tn(*begin_num)..=tn(*end_num)).collect()
+            }
+        })
+        .collect();
+    let mut sorted_indices = expanded_indices.clone();
+    sorted_indices.sort();
+
+    let first_index = *sorted_indices.first().unwrap();
+
+    let last_index = *sorted_indices.last().unwrap();
+
+    let take_length = last_index + 1;
+
+    let split_map = split_line
+        .into_iter()
+        .enumerate()
+        .skip(first_index)
+        .take(take_length)
+        .collect::<HashMap<_, _>>();
+
+    let mut print_string = Vec::with_capacity(input_line.len());
+
+    for print_index in expanded_indices {
+        print_string.push(*split_map.get(&print_index).unwrap())
+    }
+
+    println!("{}", print_string.join(""));
 }
