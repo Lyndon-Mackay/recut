@@ -92,7 +92,9 @@ pub fn cut(input: IoType, cut_type: CutType) -> Result<(), io::ErrorKind> {
         CutType::Characters(_) => print_by_character(input, parsed_indices),
         CutType::FieldsInferDelimiter(_) => {}
         CutType::FieldsRegexDelimiter(_, _) => {}
-        CutType::FieldsStringDelimiter(_, _) => {}
+        CutType::FieldsStringDelimiter(_, delimiter) => {
+            print_by_string_delimiter(input, &delimiter, parsed_indices)
+        }
     }
 
     Ok(())
@@ -195,10 +197,12 @@ fn print_line_by_character(input_line: &str, input_indices: &[UnExpandedIndices]
 
     let last_index = *sorted_indices.last().unwrap();
 
+    let take_length = last_index + 1;
+
     let char_map = input_line
         .char_indices()
         .skip(first_index)
-        .take(last_index)
+        .take(take_length)
         .collect::<HashMap<_, _>>();
 
     let mut print_string = String::new();
@@ -264,11 +268,13 @@ fn print_line_by_bytes(input_line: &str, splits_alowed: bool, input_indices: &[U
 
     let last_index = *sorted_indices.last().unwrap();
 
+    let take_length = last_index + 1;
+
     let byte_map = input_line
         .bytes()
         .enumerate()
         .skip(first_index)
-        .take(last_index)
+        .take(take_length)
         .collect::<HashMap<_, _>>();
 
     let mut print_bytes = Vec::with_capacity(length);
@@ -284,4 +290,88 @@ fn print_line_by_bytes(input_line: &str, splits_alowed: bool, input_indices: &[U
     } else {
         println!("{}", print_string.replace("�", ""))
     }
+}
+
+fn print_by_string_delimiter(
+    io_type: IoType,
+    delimiter: &str,
+    input_indices: Vec<UnExpandedIndices>,
+) {
+    match io_type {
+        IoType::FromStdIn => {
+            for line in io::stdin().lock().lines() {
+                print_line_by_string_delimiter(&line.unwrap(), delimiter, &input_indices)
+            }
+        }
+        IoType::FromFile(file_name) => {
+            let file = File::open(file_name).unwrap();
+
+            let reader = BufReader::new(file);
+
+            for line in reader.lines() {
+                print_line_by_string_delimiter(&line.unwrap(), delimiter, &input_indices);
+            }
+        }
+    }
+}
+
+fn print_line_by_string_delimiter(
+    input_line: &str,
+    delimiter: &str,
+    input_indices: &[UnExpandedIndices],
+) {
+    let split_line = input_line.split(delimiter);
+
+    let length = split_line.clone().count();
+
+    // like moduluo  but number wraped  around index for negative numbers
+    let tn = |num: i32| {
+        if num >= 0 {
+            num as usize
+        } else {
+            length - num as usize
+        }
+    };
+
+    let expanded_indices: Vec<_> = input_indices
+        .into_iter()
+        .flat_map(|range| match range {
+            UnExpandedIndices::Index(num) => vec![*num as usize],
+            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd) => {
+                (0..=length).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::Index(num)) => {
+                (0..=tn(*num)).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::Index(num), EndRange::ToEnd) => {
+                (tn(*num)..=length).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::Index(begin_num), EndRange::Index(end_num)) => {
+                (tn(*begin_num)..=tn(*end_num)).collect()
+            }
+        })
+        .collect();
+    let mut sorted_indices = expanded_indices.clone();
+    sorted_indices.sort();
+
+    let first_index = *sorted_indices.first().unwrap();
+
+    let last_index = *sorted_indices.last().unwrap();
+
+    let take_length = last_index + 1;
+
+    let split_map = split_line
+        .into_iter()
+        .enumerate()
+        .skip(first_index)
+        .take(take_length)
+        .collect::<HashMap<_, _>>();
+
+    let mut print_string = Vec::with_capacity(input_line.len());
+
+    for print_index in expanded_indices {
+        print_string.push(*split_map.get(&print_index).unwrap())
+    }
+
+    println!("{}", print_string.join(delimiter));
 }
