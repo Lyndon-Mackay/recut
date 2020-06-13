@@ -459,3 +459,5 @@ fn print_line_by_regex_delimiter(
 
     println!("{}", print_string.join(""));
 }
+
+fn print_infer_regex(io_type: IoType, input_indices: Vec<UnExpandedIndices>) {}

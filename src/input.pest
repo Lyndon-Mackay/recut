@@ -1,0 +1,5 @@
+potential_delim = { !"\""~ (WHITE_SPACE | PUNCTUATION)}
+double_quote = _{"\"\""}
+quoted_data = _{"\"" ~ (double_quote| !"\"" ~ ANY)* ~ "\"" }
+data = { quoted_data |(!potential_delim ~!"\""  ~ ANY)* }
+input = { data ~ ( potential_delim+ ~ data)* }
