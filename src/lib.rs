@@ -8,11 +8,10 @@ extern crate pest_derive;
 
 use fs::File;
 use pest::{iterators::Pairs, Parser};
+use range::{parse_indices, BeginRange, EndRange, UnExpandedIndices};
 use regex::Regex;
 
-#[derive(Parser)]
-#[grammar = "list.pest"]
-pub struct ListParser;
+mod range;
 
 #[derive(Clone, Debug)]
 pub enum IoType {
@@ -27,21 +26,6 @@ pub enum CutType {
     FieldsInferDelimiter(String),
     FieldsRegexDelimiter(String, String),
     FieldsStringDelimiter(String, String),
-}
-
-enum BeginRange {
-    Index(i32),
-    FromStart,
-}
-
-enum EndRange {
-    Index(i32),
-    ToEnd,
-}
-
-enum UnExpandedIndices {
-    Index(i32),
-    Range(BeginRange, EndRange),
 }
 
 #[derive(Clone, Debug)]
@@ -101,46 +85,6 @@ pub fn cut(input: IoType, cut_type: CutType) -> Result<(), io::ErrorKind> {
     }
 
     Ok(())
-}
-
-/**
-Attempts to pass the list argument if sucessfull it then converts the indices to numbers
-and creates and generates a vecor of type  UnExpandedIndices
-*/
-
-/* TODO add range errors */
-fn parse_indices(
-    input: &str,
-) -> std::result::Result<Vec<UnExpandedIndices>, pest::error::Error<Rule>> {
-    /* Mao to act on sucessfull case transfroms parse into  */
-    ListParser::parse(Rule::list, input).map(|parse| {
-        parse
-            .into_iter()
-            .map(|parse_pair| {
-                let range: Vec<_> = parse_pair.into_inner().map(|x| x.as_str()).collect();
-
-                match range.as_slice() {
-                    [index] => UnExpandedIndices::Index(index.parse().unwrap()),
-                    [begin, end] if begin == &"" && end == &"" => {
-                        UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd)
-                    }
-                    [begin, end] if begin == &"" => UnExpandedIndices::Range(
-                        BeginRange::FromStart,
-                        EndRange::Index(end.parse().unwrap()),
-                    ),
-                    [begin, end] if end == &"" => UnExpandedIndices::Range(
-                        BeginRange::Index(begin.parse().unwrap()),
-                        EndRange::ToEnd,
-                    ),
-                    [begin, end] => UnExpandedIndices::Range(
-                        BeginRange::Index(begin.parse().unwrap()),
-                        EndRange::Index(end.parse().unwrap()),
-                    ),
-                    _ => unreachable!(),
-                }
-            })
-            .collect()
-    })
 }
 
 fn print_by_character(io_type: IoType, input_indices: Vec<UnExpandedIndices>) {
