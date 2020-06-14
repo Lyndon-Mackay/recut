@@ -235,9 +235,11 @@ fn print_line_by_bytes(input_line: &str, splits_alowed: bool, input_indices: &[U
     if splits_alowed {
         println!("{}", print_string);
     } else {
-        println!("{}", print_string.replace("�", ""))
+        println!("{}", print_string.trim_end_matches("�"))
     }
 }
+
+/* TODO  Handle strings with quotes */
 
 fn print_by_string_delimiter(
     io_type: IoType,
