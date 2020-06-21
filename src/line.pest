@@ -1,0 +1,5 @@
+
+double_quote = _{"\"\""}
+quoted_data = {"\"" ~ (double_quote| !"\"" ~ ANY)* ~ "\"" }
+data = { (!"\"" ~ ANY)+ }
+line = { (quoted_data | data)* }

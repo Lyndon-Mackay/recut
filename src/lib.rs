@@ -1,7 +1,11 @@
 extern crate pest;
 
 use io::{BufRead, BufReader, Read};
-use std::{collections::HashMap, error, fmt, fs, io, num::ParseIntError};
+use std::{
+    collections::{BTreeMap, HashMap},
+    error, fmt, fs, io,
+    num::ParseIntError,
+};
 
 #[macro_use]
 extern crate pest_derive;
@@ -27,6 +31,10 @@ pub enum CutType {
     FieldsRegexDelimiter(String, String),
     FieldsStringDelimiter(String, String),
 }
+
+#[derive(Parser)]
+#[grammar = "input.pest"]
+pub struct InputParser;
 
 #[derive(Clone, Debug)]
 enum RangeParseError {
@@ -75,7 +83,7 @@ pub fn cut(input: IoType, cut_type: CutType) -> Result<(), io::ErrorKind> {
     match cut_type {
         CutType::Bytes(_, split) => print_by_bytes(input, split, parsed_indices),
         CutType::Characters(_) => print_by_character(input, parsed_indices),
-        CutType::FieldsInferDelimiter(_) => {}
+        CutType::FieldsInferDelimiter(_) => print_infer_regex(input, parsed_indices),
         CutType::FieldsRegexDelimiter(_, delimiter) => {
             print_by_regex(input, &delimiter, parsed_indices)
         }
@@ -406,4 +414,58 @@ fn print_line_by_regex_delimiter(
     println!("{}", print_string.join(""));
 }
 
-fn print_infer_regex(io_type: IoType, input_indices: Vec<UnExpandedIndices>) {}
+fn print_infer_regex(io_type: IoType, input_indices: Vec<UnExpandedIndices>) {
+    match io_type {
+        IoType::FromStdIn => {
+            let mut line = String::new();
+            io::stdin().read_line(&mut line).unwrap();
+            let delimiter = infer_delimiter(&line);
+
+            println!("inferred delimiter {}", delimiter);
+
+            print_line_by_string_delimiter(&line, &delimiter, &input_indices);
+            for line in io::stdin().lock().lines() {
+                print_line_by_string_delimiter(&line.unwrap(), &delimiter, &input_indices)
+            }
+        }
+        IoType::FromFile(file_name) => {
+            let file = File::open(file_name).unwrap();
+
+            let mut reader = BufReader::new(file);
+            let mut line = String::new();
+
+            let read = reader.read_line(&mut line).unwrap();
+
+            let delimiter = infer_delimiter(&line);
+            for line in reader.lines().skip(1) {
+                print_line_by_string_delimiter(&line.unwrap(), &delimiter, &input_indices);
+            }
+        }
+    }
+}
+
+fn infer_delimiter(input_line: &str) -> String {
+    let parse_result = InputParser::parse(Rule::input, input_line).unwrap();
+
+    let mut potential_delimiters = BTreeMap::new();
+    for parse_pair in parse_result {
+        for iner in parse_pair.into_inner() {
+            match iner.as_rule() {
+                Rule::data => {}
+                Rule::potential_delim => {
+                    let next_delim = potential_delimiters.entry(iner.as_str()).or_insert(0);
+                    *next_delim += 1;
+                }
+                _ => unreachable!(),
+            };
+        }
+    }
+
+    potential_delimiters
+        .iter()
+        .next_back()
+        .unwrap()
+        .0
+        .to_owned()
+        .to_owned()
+}
