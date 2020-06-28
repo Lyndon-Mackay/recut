@@ -249,8 +249,6 @@ fn print_line_by_bytes(input_line: &str, splits_alowed: bool, input_indices: &[U
     }
 }
 
-/* TODO  Handle strings with quotes */
-
 fn print_by_string_delimiter(
     io_type: IoType,
     delimiter: &str,
@@ -259,7 +257,9 @@ fn print_by_string_delimiter(
     match io_type {
         IoType::FromStdIn => {
             for line in io::stdin().lock().lines() {
-                print_line_by_string_delimiter(&line.unwrap(), delimiter, &input_indices)
+                let split_line = split_line_quotes(&line.unwrap(), delimiter);
+
+                print_line_delimited(&split_line, &input_indices)
             }
         }
         IoType::FromFile(file_name) => {
@@ -268,81 +268,21 @@ fn print_by_string_delimiter(
             let reader = BufReader::new(file);
 
             for line in reader.lines() {
-                print_line_by_string_delimiter(&line.unwrap(), delimiter, &input_indices);
+                let split_line = split_line_quotes(&line.unwrap(), delimiter);
+
+                print_line_delimited(&split_line, &input_indices)
             }
         }
     }
 }
-
-fn print_line_by_string_delimiter(
-    input_line: &str,
-    delimiter: &str,
-    input_indices: &[UnExpandedIndices],
-) {
-    let split_line = split_line_quotes(input_line, delimiter);
-
-    let length = split_line.clone().len();
-
-    // like moduluo  but number wraped  around index for negative numbers
-    let tn = |num: i32| {
-        if num >= 0 {
-            num as usize
-        } else {
-            length - num as usize
-        }
-    };
-
-    let expanded_indices: Vec<_> = input_indices
-        .into_iter()
-        .flat_map(|range| match range {
-            UnExpandedIndices::Index(num) => vec![*num as usize],
-            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd) => {
-                (0..=length).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::Index(num)) => {
-                (0..=tn(*num)).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::Index(num), EndRange::ToEnd) => {
-                (tn(*num)..=length).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::Index(begin_num), EndRange::Index(end_num)) => {
-                (tn(*begin_num)..=tn(*end_num)).collect()
-            }
-        })
-        .collect();
-    let mut sorted_indices = expanded_indices.clone();
-    sorted_indices.sort();
-
-    let first_index = *sorted_indices.first().unwrap();
-
-    let last_index = *sorted_indices.last().unwrap();
-
-    let take_length = last_index + 1;
-
-    let split_map = split_line
-        .into_iter()
-        .enumerate()
-        .skip(first_index)
-        .take(take_length)
-        .collect::<HashMap<_, _>>();
-
-    let mut print_string = Vec::with_capacity(input_line.len());
-
-    for print_index in expanded_indices {
-        let next = split_map.get(&print_index).unwrap().to_owned();
-        print_string.push(next);
-    }
-
-    println!("{}", print_string.join(delimiter));
-}
-
 fn print_by_regex(io_type: IoType, delimiter: &str, input_indices: Vec<UnExpandedIndices>) {
     let regex_delim = Regex::new(delimiter).unwrap();
 
     match io_type {
         IoType::FromStdIn => {
             for line in io::stdin().lock().lines() {
-                print_line_by_regex_delimiter(&line.unwrap(), &regex_delim, &input_indices)
+                let split_line = split_line_regex_quotes(&line.unwrap(), &regex_delim);
+                print_line_delimited(&split_line, &input_indices)
             }
         }
         IoType::FromFile(file_name) => {
@@ -351,18 +291,13 @@ fn print_by_regex(io_type: IoType, delimiter: &str, input_indices: Vec<UnExpande
             let reader = BufReader::new(file);
 
             for line in reader.lines() {
-                print_line_by_regex_delimiter(&line.unwrap(), &regex_delim, &input_indices)
+                let split_line = split_line_regex_quotes(&line.unwrap(), &regex_delim);
+                print_line_delimited(&split_line, &input_indices)
             }
         }
     }
 }
-fn print_line_by_regex_delimiter(
-    input_line: &str,
-    regex_delim: &Regex,
-    input_indices: &[UnExpandedIndices],
-) {
-    let split_line: Vec<_> = split_line_regex_quotes(input_line, regex_delim);
-
+fn print_line_delimited(split_line: &[String], input_indices: &[UnExpandedIndices]) {
     let length = split_line.len();
 
     // like moduluo  but number wraped  around index for negative numbers
@@ -408,10 +343,11 @@ fn print_line_by_regex_delimiter(
         .take(take_length)
         .collect::<HashMap<_, _>>();
 
-    let mut print_string = Vec::with_capacity(input_line.len());
+    let mut print_string = Vec::with_capacity(length);
 
     for print_index in expanded_indices {
-        print_string.push(split_map.get(&print_index).unwrap().to_owned())
+        let next = split_map.get(&print_index).unwrap().to_owned().to_owned();
+        print_string.push(next)
     }
 
     println!("{}", print_string.join(""));
@@ -424,9 +360,11 @@ fn print_infer_regex(io_type: IoType, input_indices: Vec<UnExpandedIndices>) {
             io::stdin().read_line(&mut line).unwrap();
             let delimiter = infer_delimiter(&line);
 
-            print_line_by_string_delimiter(&line, &delimiter, &input_indices);
+            let split_line = split_line_quotes(&line, &delimiter);
+            print_line_delimited(&split_line, &input_indices);
             for line in io::stdin().lock().lines() {
-                print_line_by_string_delimiter(&line.unwrap(), &delimiter, &input_indices)
+                let split_line = split_line_quotes(&line.unwrap(), &delimiter);
+                print_line_delimited(&split_line, &input_indices);
             }
         }
         IoType::FromFile(file_name) => {
@@ -438,8 +376,11 @@ fn print_infer_regex(io_type: IoType, input_indices: Vec<UnExpandedIndices>) {
             let read = reader.read_line(&mut line).unwrap();
 
             let delimiter = infer_delimiter(&line);
+            let split_line = split_line_quotes(&line, &delimiter);
+            print_line_delimited(&split_line, &input_indices);
             for line in reader.lines().skip(1) {
-                print_line_by_string_delimiter(&line.unwrap(), &delimiter, &input_indices);
+                let split_line = split_line_quotes(&line.unwrap(), &delimiter);
+                print_line_delimited(&split_line, &input_indices);
             }
         }
     }
