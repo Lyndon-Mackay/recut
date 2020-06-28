@@ -1,6 +1,6 @@
 extern crate pest;
 
-use io::{BufRead, BufReader, Read};
+use io::{BufRead, BufReader};
 use std::{
     collections::{BTreeMap, HashMap},
     error, fmt, fs, io,
@@ -10,11 +10,13 @@ use std::{
 #[macro_use]
 extern crate pest_derive;
 
+use field::split_line_quotes;
 use fs::File;
-use pest::{iterators::Pairs, Parser};
+use pest::Parser;
 use range::{parse_indices, BeginRange, EndRange, UnExpandedIndices};
 use regex::Regex;
 
+mod field;
 mod range;
 
 #[derive(Clone, Debug)]
@@ -277,9 +279,9 @@ fn print_line_by_string_delimiter(
     delimiter: &str,
     input_indices: &[UnExpandedIndices],
 ) {
-    let split_line = input_line.split(delimiter);
+    let split_line = split_line_quotes(input_line, delimiter);
 
-    let length = split_line.clone().count();
+    let length = split_line.clone().len();
 
     // like moduluo  but number wraped  around index for negative numbers
     let tn = |num: i32| {
@@ -327,7 +329,8 @@ fn print_line_by_string_delimiter(
     let mut print_string = Vec::with_capacity(input_line.len());
 
     for print_index in expanded_indices {
-        print_string.push(*split_map.get(&print_index).unwrap())
+        let next = split_map.get(&print_index).unwrap().to_owned();
+        print_string.push(next);
     }
 
     println!("{}", print_string.join(delimiter));
@@ -420,8 +423,6 @@ fn print_infer_regex(io_type: IoType, input_indices: Vec<UnExpandedIndices>) {
             let mut line = String::new();
             io::stdin().read_line(&mut line).unwrap();
             let delimiter = infer_delimiter(&line);
-
-            println!("inferred delimiter {}", delimiter);
 
             print_line_by_string_delimiter(&line, &delimiter, &input_indices);
             for line in io::stdin().lock().lines() {
