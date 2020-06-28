@@ -10,7 +10,7 @@ use std::{
 #[macro_use]
 extern crate pest_derive;
 
-use field::split_line_quotes;
+use field::{split_line_quotes, split_line_regex_quotes};
 use fs::File;
 use pest::Parser;
 use range::{parse_indices, BeginRange, EndRange, UnExpandedIndices};
@@ -361,7 +361,7 @@ fn print_line_by_regex_delimiter(
     regex_delim: &Regex,
     input_indices: &[UnExpandedIndices],
 ) {
-    let split_line: Vec<_> = regex_delim.split(input_line).collect();
+    let split_line: Vec<_> = split_line_regex_quotes(input_line, regex_delim);
 
     let length = split_line.len();
 
@@ -411,7 +411,7 @@ fn print_line_by_regex_delimiter(
     let mut print_string = Vec::with_capacity(input_line.len());
 
     for print_index in expanded_indices {
-        print_string.push(*split_map.get(&print_index).unwrap())
+        print_string.push(split_map.get(&print_index).unwrap().to_owned())
     }
 
     println!("{}", print_string.join(""));
