@@ -9,7 +9,7 @@ A utf-8, regular expression delimiter implementation of the UNIX tool CUT. With 
  - Regex Delimiters.
  - Inferring Delimiter based on first line.
  - Ranges e.g 5: print everything from the fifth position on wards based on the first line.
- - Index from the end using the "-" symbol e.g. -2 second to last item base don the first line.
+ - Index from the end using the "-" symbol e.g. "-2" means second to last item base don the first line.
  - Quoted data counts as a single line similar to a CSV  (with double quotes as an escape).
  
 
