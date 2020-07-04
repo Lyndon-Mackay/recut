@@ -31,23 +31,33 @@ fn main() {
             .takes_value(true)
             .validator(check_formatted_lists)
         )
-        .group(ArgGroup::with_name("Range").
-            args(&["Bytes","Characters","Fields"])
+        .arg(
+            Arg::with_name("MatchField")
+            .short("m")
+            .value_name("MATCHES")
+            .takes_value(true)
+        )
+        .group(ArgGroup::with_name("Range")
+            .args(&["Bytes","Characters","Fields","MatchField"])
             .required(true)
+        )
+        .group(ArgGroup::with_name("DataSeperator")
+            .args(&["Fields","MatchField"])
+            .required(false)
         )
         .arg(
             Arg::with_name("Delimiter")
             .short("d")
             .takes_value(true)
-            .requires("Fields")
-            .help(r#"Delimiter regex which to read the input ,fields option (-f) must be used. If not present an attempt will be made to infer the delimiter"#)
+            .requires("DataSeperator")
+            .help(r#"Delimiter regex which to read the input ,fields option (-f) Or MatchField option (-m) must be used. If not present an attempt will be made to infer the delimiter"#)
         )
         .arg(
             Arg::with_name("Split")
             .short("s")
             .takes_value(true)
-            .requires("Fields")
-            .help("Like D but for string literals only,fields option (-f) must be used.")
+            .requires("n")
+            .help("Like D but for string literals only,fields option (-f) or MatchField option (-m) must be used.")
             .conflicts_with("Delimiter")
         ) 
         .arg(
@@ -79,25 +89,29 @@ fn main() {
 
     let cut_type = matches
         .value_of("Bytes")
-        .map(|x| CutType::Bytes(x.to_string(),!matches.is_present("NoMultiByteSplit")))
+        .map(|x| CutType::Bytes(x,!matches.is_present("NoMultiByteSplit")))
         .or_else(|| {
             matches
                 .value_of("Characters")
-                .map(|x| CutType::Characters(x.to_string()))
+                .map(|x| CutType::Characters(x))
         })
         .or_else(|| {
             matches
                 .value_of("Fields")
-                .map(|x| CutType::FieldsInferDelimiter(x.to_string()))
+                .map(|x| CutType::FieldsInferDelimiter(x))
+        })
+        .or_else(||{
+            matches.value_of("MatchField")
+            .map(|x| CutType::MatchesInferDelimiter(x))
         })
         .unwrap();
 
     let cut_type = match cut_type {
         CutType::FieldsInferDelimiter(x) => {
             if let Some(s) = matches.value_of("Delimiter") {
-                CutType::FieldsRegexDelimiter(x, s.to_string())
+                CutType::FieldsRegexDelimiter(RangeDelimiter::new(x, s))
             } else if let Some(s) = matches.value_of("Split") {
-                CutType::FieldsStringDelimiter(x, s.to_string())
+                CutType::FieldsStringDelimiter(RangeDelimiter::new(x, s))
             } else {
                 CutType::FieldsInferDelimiter(x)
             }
@@ -107,7 +121,7 @@ fn main() {
 
     println!("{:?} ", cut_type);
 
-    cut(input_type,cut_type);
+    cut(input_type,cut_type).unwrap();
 }
 /**
 Uses a few regexes to get rid of the most obvious errors full parsing done later

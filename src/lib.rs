@@ -1,6 +1,12 @@
 extern crate pest;
 
+use field::{split_line_quotes, split_line_regex_quotes};
+use fs::File;
 use io::{BufRead, BufReader};
+use match_field::parse_match_indices;
+use pest::Parser;
+use range::{parse_indices, BeginRange, EndRange, UnExpandedIndices};
+use regex::Regex;
 use std::{
     collections::{BTreeMap, HashMap},
     error, fmt, fs, io,
@@ -10,13 +16,8 @@ use std::{
 #[macro_use]
 extern crate pest_derive;
 
-use field::{split_line_quotes, split_line_regex_quotes};
-use fs::File;
-use pest::Parser;
-use range::{parse_indices, BeginRange, EndRange, UnExpandedIndices};
-use regex::Regex;
-
 mod field;
+mod match_field;
 mod range;
 
 #[derive(Clone, Debug)]
@@ -24,14 +25,37 @@ pub enum IoType {
     FromStdIn,
     FromFile(String),
 }
+#[derive(Clone, Debug)]
+pub struct RangeDelimiter<'a> {
+    locations: &'a str,
+    delimiter: &'a str,
+}
 
 #[derive(Clone, Debug)]
-pub enum CutType {
-    Bytes(String, bool),
-    Characters(String),
-    FieldsInferDelimiter(String),
-    FieldsRegexDelimiter(String, String),
-    FieldsStringDelimiter(String, String),
+pub enum CutType<'a> {
+    Bytes(&'a str, bool),
+    Characters(&'a str),
+    FieldsInferDelimiter(&'a str),
+    FieldsRegexDelimiter(RangeDelimiter<'a>),
+    FieldsStringDelimiter(RangeDelimiter<'a>),
+    MatchesInferDelimiter(&'a str),
+    MatchesRegexDelimiter(RangeDelimiter<'a>),
+    MatchesStringDelimiter(RangeDelimiter<'a>),
+}
+
+#[derive(Clone, Debug)]
+enum RangeType<'a> {
+    Indices(&'a str),
+    Matches(&'a str),
+}
+
+impl RangeDelimiter<'_> {
+    pub fn new<'a>(locations: &'a str, delimiter: &'a str) -> RangeDelimiter<'a> {
+        RangeDelimiter {
+            locations,
+            delimiter,
+        }
+    }
 }
 
 #[derive(Parser)]
@@ -43,14 +67,17 @@ enum RangeParseError {
     IntError(ParseIntError),
 }
 
-impl CutType {
-    fn ranges(&self) -> &str {
+impl CutType<'_> {
+    fn ranges<'a>(&'a self) -> &'a str {
         match self {
-            CutType::Bytes(s, _) => s,
-            CutType::Characters(s) => s,
-            CutType::FieldsInferDelimiter(s) => s,
-            CutType::FieldsRegexDelimiter(s, _) => s,
-            CutType::FieldsStringDelimiter(s, _) => s,
+            CutType::Bytes(s, _) => &s,
+            CutType::Characters(s) => &s,
+            CutType::FieldsInferDelimiter(s) => &s,
+            CutType::FieldsRegexDelimiter(s) => &s.locations,
+            CutType::FieldsStringDelimiter(s) => &s.locations,
+            CutType::MatchesInferDelimiter(s) => &s,
+            CutType::MatchesRegexDelimiter(s) => &s.locations,
+            CutType::MatchesStringDelimiter(s) => &s.locations,
         }
     }
 }
@@ -80,18 +107,32 @@ impl From<ParseIntError> for RangeParseError {
 }
 
 pub fn cut(input: IoType, cut_type: CutType) -> Result<(), io::ErrorKind> {
-    let parsed_indices = parse_indices(cut_type.ranges()).unwrap();
-
     match cut_type {
-        CutType::Bytes(_, split) => print_by_bytes(input, split, parsed_indices),
-        CutType::Characters(_) => print_by_character(input, parsed_indices),
-        CutType::FieldsInferDelimiter(_) => print_infer_regex(input, parsed_indices),
-        CutType::FieldsRegexDelimiter(_, delimiter) => {
-            print_by_regex(input, &delimiter, parsed_indices)
+        CutType::Bytes(range, split) => {
+            let parsed_indices = parse_indices(range).unwrap();
+            print_by_bytes(input, split, parsed_indices)
         }
-        CutType::FieldsStringDelimiter(_, delimiter) => {
-            print_by_string_delimiter(input, &delimiter, parsed_indices)
+        CutType::Characters(range) => {
+            let parsed_indices = parse_indices(range).unwrap();
+            print_by_character(input, parsed_indices)
         }
+        CutType::FieldsInferDelimiter(range) => {
+            let parsed_indices = parse_indices(range).unwrap();
+            print_infer_regex(input, parsed_indices)
+        }
+        CutType::FieldsRegexDelimiter(range) => {
+            let parsed_indices = parse_indices(range.locations).unwrap();
+            print_by_regex(input, &range.delimiter, parsed_indices)
+        }
+        CutType::FieldsStringDelimiter(range) => {
+            let parsed_indices = parse_indices(range.locations).unwrap();
+            print_by_string_delimiter(input, &range.delimiter, parsed_indices)
+        }
+        CutType::MatchesInferDelimiter(range) => {
+            print_match_infer_regex(input, range);
+        }
+        CutType::MatchesRegexDelimiter(range) => {}
+        CutType::MatchesStringDelimiter(raange) => {}
     }
 
     Ok(())
@@ -384,6 +425,55 @@ fn print_infer_regex(io_type: IoType, input_indices: Vec<UnExpandedIndices>) {
             }
         }
     }
+}
+
+fn print_match_infer_regex(io_type: IoType, match_str: &str) {
+    match io_type {
+        IoType::FromStdIn => {
+            let mut line = String::new();
+            io::stdin().read_line(&mut line).unwrap();
+            let delimiter = infer_delimiter(&line);
+
+            let (split_line, input_indices) = parse_match_indices(match_str, &line, &delimiter);
+
+            println!("{}", split_line.join(","));
+            for line in io::stdin().lock().lines() {
+                let split_line = split_line_quotes(&line.unwrap(), &delimiter);
+                print_line_match_delimited(&split_line, &input_indices);
+            }
+        }
+        IoType::FromFile(file_name) => {
+            let file = File::open(file_name).unwrap();
+
+            let mut reader = BufReader::new(file);
+            let mut line = String::new();
+
+            let read = reader.read_line(&mut line).unwrap();
+
+            let delimiter = infer_delimiter(&line);
+            let (split_line, input_indices) = parse_match_indices(match_str, &line, &delimiter);
+            println!("{}", split_line.join(","));
+            for line in reader.lines().skip(1) {
+                let split_line = split_line_quotes(&line.unwrap(), &delimiter);
+                print_line_match_delimited(&split_line, &input_indices);
+            }
+        }
+    }
+}
+fn print_line_match_delimited(split_line: &[String], input_indices: &[usize]) {
+    let mut print_string = Vec::with_capacity(input_indices.len());
+
+    let split_indices = split_line
+        .into_iter()
+        .enumerate()
+        .collect::<HashMap<_, _>>();
+
+    for i in input_indices {
+        let next = split_indices.get(&i).unwrap().to_owned().to_owned();
+        print_string.push(next);
+    }
+
+    println!("{}", print_string.join(","));
 }
 
 fn infer_delimiter(input_line: &str) -> String {
