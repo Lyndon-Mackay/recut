@@ -3,7 +3,7 @@ extern crate pest;
 use field::{split_line_quotes, split_line_regex_quotes};
 use fs::File;
 use io::{BufRead, BufReader};
-use match_field::parse_match_indices;
+use match_field::{parse_match_indices, parse_match_indices_regex};
 use pest::Parser;
 use range::{parse_indices, BeginRange, EndRange, UnExpandedIndices};
 use regex::Regex;
@@ -131,8 +131,12 @@ pub fn cut(input: IoType, cut_type: CutType) -> Result<(), io::ErrorKind> {
         CutType::MatchesInferDelimiter(range) => {
             print_match_infer_regex(input, range);
         }
-        CutType::MatchesRegexDelimiter(range) => {}
-        CutType::MatchesStringDelimiter(raange) => {}
+        CutType::MatchesRegexDelimiter(range) => {
+            print_match_regex_delimiter(input, range.delimiter, range.locations)
+        }
+        CutType::MatchesStringDelimiter(range) => {
+            print_match_string_delimiter(input, range.delimiter, range.locations)
+        }
     }
 
     Ok(())
@@ -474,6 +478,71 @@ fn print_line_match_delimited(split_line: &[String], input_indices: &[usize]) {
     }
 
     println!("{}", print_string.join(","));
+}
+
+fn print_match_string_delimiter(io_type: IoType, delimiter: &str, match_str: &str) {
+    match io_type {
+        IoType::FromStdIn => {
+            let mut line = String::new();
+            io::stdin().read_line(&mut line).unwrap();
+
+            let (split_line, input_indices) = parse_match_indices(match_str, &line, &delimiter);
+
+            println!("{}", split_line.join(","));
+            for line in io::stdin().lock().lines() {
+                let split_line = split_line_quotes(&line.unwrap(), &delimiter);
+                print_line_match_delimited(&split_line, &input_indices);
+            }
+        }
+        IoType::FromFile(file_name) => {
+            let file = File::open(file_name).unwrap();
+
+            let mut reader = BufReader::new(file);
+            let mut line = String::new();
+
+            let read = reader.read_line(&mut line).unwrap();
+
+            let (split_line, input_indices) = parse_match_indices(match_str, &line, &delimiter);
+            println!("{}", split_line.join(","));
+            for line in reader.lines().skip(1) {
+                let split_line = split_line_quotes(&line.unwrap(), &delimiter);
+                print_line_match_delimited(&split_line, &input_indices);
+            }
+        }
+    }
+}
+
+fn print_match_regex_delimiter(io_type: IoType, delimiter: &str, match_str: &str) {
+    let regex = Regex::new(delimiter).unwrap();
+    match io_type {
+        IoType::FromStdIn => {
+            let mut line = String::new();
+            io::stdin().read_line(&mut line).unwrap();
+
+            let (split_line, input_indices) = parse_match_indices_regex(match_str, &line, &regex);
+
+            println!("{}", split_line.join(","));
+            for line in io::stdin().lock().lines() {
+                let split_line = split_line_regex_quotes(&line.unwrap(), &regex);
+                print_line_match_delimited(&split_line, &input_indices);
+            }
+        }
+        IoType::FromFile(file_name) => {
+            let file = File::open(file_name).unwrap();
+
+            let mut reader = BufReader::new(file);
+            let mut line = String::new();
+
+            let read = reader.read_line(&mut line).unwrap();
+
+            let (split_line, input_indices) = parse_match_indices_regex(match_str, &line, &regex);
+            println!("{}", split_line.join(","));
+            for line in reader.lines().skip(1) {
+                let split_line = split_line_regex_quotes(&line.unwrap(), &regex);
+                print_line_match_delimited(&split_line, &input_indices);
+            }
+        }
+    }
 }
 
 fn infer_delimiter(input_line: &str) -> String {

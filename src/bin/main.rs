@@ -116,6 +116,15 @@ fn main() {
                 CutType::FieldsInferDelimiter(x)
             }
         },
+        CutType::MatchesInferDelimiter(x) =>{
+            if let Some(s) = matches.value_of("Delimiter") {
+                CutType::MatchesRegexDelimiter(RangeDelimiter::new(x, s))
+            } else if let Some(s) = matches.value_of("Split") {
+                CutType::MatchesStringDelimiter(RangeDelimiter::new(x, s))
+            } else {
+                CutType::MatchesInferDelimiter(x)
+            }
+        }
         x => x,
     };
 
