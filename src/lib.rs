@@ -43,12 +43,6 @@ pub enum CutType<'a> {
     MatchesStringDelimiter(RangeDelimiter<'a>),
 }
 
-#[derive(Clone, Debug)]
-enum RangeType<'a> {
-    Indices(&'a str),
-    Matches(&'a str),
-}
-
 impl RangeDelimiter<'_> {
     pub fn new<'a>(locations: &'a str, delimiter: &'a str) -> RangeDelimiter<'a> {
         RangeDelimiter {
@@ -65,21 +59,6 @@ pub struct InputParser;
 #[derive(Clone, Debug)]
 enum RangeParseError {
     IntError(ParseIntError),
-}
-
-impl CutType<'_> {
-    fn ranges<'a>(&'a self) -> &'a str {
-        match self {
-            CutType::Bytes(s, _) => &s,
-            CutType::Characters(s) => &s,
-            CutType::FieldsInferDelimiter(s) => &s,
-            CutType::FieldsRegexDelimiter(s) => &s.locations,
-            CutType::FieldsStringDelimiter(s) => &s.locations,
-            CutType::MatchesInferDelimiter(s) => &s,
-            CutType::MatchesRegexDelimiter(s) => &s.locations,
-            CutType::MatchesStringDelimiter(s) => &s.locations,
-        }
-    }
 }
 
 impl fmt::Display for RangeParseError {
