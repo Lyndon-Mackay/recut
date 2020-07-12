@@ -140,38 +140,7 @@ fn print_by_character(input_buffer: Box<dyn BufRead>, input_indices: &[UnExpande
 
 fn print_line_by_character(input_line: &str, input_indices: &[UnExpandedIndices]) {
     let length = input_line.chars().count();
-
-    // like moduluo  but number wraped  around index for negative numbers
-    let tn = |num: i32| {
-        if num >= 0 {
-            num as usize
-        } else {
-            length - num as usize
-        }
-    };
-
-    let expanded_indices: Vec<_> = input_indices
-        .into_iter()
-        .flat_map(|range| match range {
-            UnExpandedIndices::Index(num) => vec![*num as usize],
-            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd) => {
-                (0..=length).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::Index(num)) => {
-                (0..=tn(*num)).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::Index(num), EndRange::ToEnd) => {
-                (tn(*num)..=length).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::Index(begin_num), EndRange::Index(end_num)) => {
-                (tn(*begin_num)..=tn(*end_num)).collect()
-            }
-        })
-        .collect();
-
-    let mut sorted_indices = expanded_indices.clone();
-    sorted_indices.sort();
-
+    let (sorted_indices, expanded_indices) = expand_indices(input_indices, length);
     let first_index = *sorted_indices.first().unwrap();
 
     let last_index = *sorted_indices.last().unwrap();
@@ -204,35 +173,7 @@ fn print_by_bytes(
 fn print_line_by_bytes(input_line: &str, splits_alowed: bool, input_indices: &[UnExpandedIndices]) {
     let length = input_line.bytes().count();
 
-    // like moduluo  but number wraped  around index for negative numbers
-    let tn = |num: i32| {
-        if num >= 0 {
-            num as usize
-        } else {
-            length - num as usize
-        }
-    };
-    let expanded_indices: Vec<_> = input_indices
-        .into_iter()
-        .flat_map(|range| match range {
-            UnExpandedIndices::Index(num) => vec![*num as usize],
-            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd) => {
-                (0..=length).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::Index(num)) => {
-                (0..=tn(*num)).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::Index(num), EndRange::ToEnd) => {
-                (tn(*num)..=length).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::Index(begin_num), EndRange::Index(end_num)) => {
-                (tn(*begin_num)..=tn(*end_num)).collect()
-            }
-        })
-        .collect();
-
-    let mut sorted_indices = expanded_indices.clone();
-    sorted_indices.sort();
+    let (sorted_indices, expanded_indices) = expand_indices(input_indices, length);
 
     let first_index = *sorted_indices.first().unwrap();
 
@@ -287,37 +228,7 @@ fn print_by_regex(
 }
 fn print_line_delimited(split_line: &[String], input_indices: &[UnExpandedIndices]) {
     let length = split_line.len();
-
-    // like moduluo  but number wraped  around index for negative numbers
-    let tn = |num: i32| {
-        if num >= 0 {
-            num as usize
-        } else {
-            length - num as usize
-        }
-    };
-
-    let expanded_indices: Vec<_> = input_indices
-        .into_iter()
-        .flat_map(|range| match range {
-            UnExpandedIndices::Index(num) => vec![*num as usize],
-            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd) => {
-                (0..=length).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::Index(num)) => {
-                (0..=tn(*num)).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::Index(num), EndRange::ToEnd) => {
-                (tn(*num)..=length).collect()
-            }
-            UnExpandedIndices::Range(BeginRange::Index(begin_num), EndRange::Index(end_num)) => {
-                (tn(*begin_num)..=tn(*end_num)).collect()
-            }
-        })
-        .collect();
-    let mut sorted_indices = expanded_indices.clone();
-    sorted_indices.sort();
-
+    let (sorted_indices, expanded_indices) = expand_indices(input_indices, length);
     let first_index = *sorted_indices.first().unwrap();
 
     let last_index = *sorted_indices.last().unwrap();
@@ -442,4 +353,38 @@ fn infer_delimiter(input_line: &str) -> String {
         .0
         .to_owned()
         .to_owned()
+}
+
+fn expand_indices(input_indices: &[UnExpandedIndices], length: usize) -> (Vec<usize>, Vec<usize>) {
+    // like moduluo  but number wraped  around index for negative numbers
+    let tn = |num: i32| {
+        if num >= 0 {
+            num as usize
+        } else {
+            length - num as usize
+        }
+    };
+    let expanded_indices: Vec<_> = input_indices
+        .into_iter()
+        .flat_map(|range| match range {
+            UnExpandedIndices::Index(num) => vec![*num as usize],
+            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd) => {
+                (0..=length).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::FromStart, EndRange::Index(num)) => {
+                (0..=tn(*num)).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::Index(num), EndRange::ToEnd) => {
+                (tn(*num)..=length).collect()
+            }
+            UnExpandedIndices::Range(BeginRange::Index(begin_num), EndRange::Index(end_num)) => {
+                (tn(*begin_num)..=tn(*end_num)).collect()
+            }
+        })
+        .collect();
+
+    let mut sorted_indices = expanded_indices.clone();
+    sorted_indices.sort();
+
+    (sorted_indices, expanded_indices)
 }
