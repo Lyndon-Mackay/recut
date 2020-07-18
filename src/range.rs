@@ -1,3 +1,5 @@
+use crate::error;
+use error::{RangeError, RecutError};
 use pest::Parser;
 pub enum BeginRange {
     Index(i32),
@@ -24,36 +26,42 @@ and creates and generates a vecor of type  UnExpandedIndices
 */
 
 /* TODO add range errors */
-pub fn parse_indices(
-    input: &str,
-) -> std::result::Result<Vec<UnExpandedIndices>, pest::error::Error<Rule>> {
-    /* Mao to act on sucessfull case transfroms parse into  */
-    ListParser::parse(Rule::list, input).map(|parse| {
-        parse
-            .into_iter()
-            .map(|parse_pair| {
-                let range: Vec<_> = parse_pair.into_inner().map(|x| x.as_str()).collect();
+pub fn parse_indices(input: &str) -> std::result::Result<Vec<UnExpandedIndices>, RecutError> {
+    /* Map to act on sucessfull case transfroms parse into  */
+    let parse = ListParser::parse(Rule::list, input)?;
+    parse
+        .into_iter()
+        .map(|parse_pair| {
+            let range: Vec<_> = parse_pair.into_inner().map(|x| x.as_str()).collect();
 
-                match range.as_slice() {
-                    [index] => UnExpandedIndices::Index(index.parse().unwrap()),
-                    [begin, end] if begin == &"" && end == &"" => {
-                        UnExpandedIndices::Range(BeginRange::FromStart, EndRange::ToEnd)
-                    }
-                    [begin, end] if begin == &"" => UnExpandedIndices::Range(
-                        BeginRange::FromStart,
-                        EndRange::Index(end.parse().unwrap()),
-                    ),
-                    [begin, end] if end == &"" => UnExpandedIndices::Range(
-                        BeginRange::Index(begin.parse().unwrap()),
-                        EndRange::ToEnd,
-                    ),
-                    [begin, end] => UnExpandedIndices::Range(
-                        BeginRange::Index(begin.parse().unwrap()),
-                        EndRange::Index(end.parse().unwrap()),
-                    ),
-                    _ => unreachable!(),
-                }
-            })
-            .collect()
-    })
+            match range.as_slice() {
+                [index] => Ok(UnExpandedIndices::Index(index.parse()?)),
+                [begin, end] if begin == &"" && end == &"" => Ok(UnExpandedIndices::Range(
+                    BeginRange::FromStart,
+                    EndRange::ToEnd,
+                )),
+                [begin, end] if begin == &"" => Ok(UnExpandedIndices::Range(
+                    BeginRange::FromStart,
+                    EndRange::Index(end.parse()?),
+                )),
+                [begin, end] if end == &"" => Ok(UnExpandedIndices::Range(
+                    BeginRange::Index(begin.parse()?),
+                    EndRange::ToEnd,
+                )),
+                [begin, end] => check_range(begin.parse()?, end.parse()?),
+                _ => unreachable!(),
+            }
+        })
+        .collect::<Result<Vec<UnExpandedIndices>, RecutError>>()
+}
+
+fn check_range(first_num: i32, second_num: i32) -> Result<UnExpandedIndices, RecutError> {
+    if first_num < second_num {
+        Ok(UnExpandedIndices::Range(
+            BeginRange::Index(first_num),
+            EndRange::Index(second_num),
+        ))
+    } else {
+        Err(RecutError::RangeValueError(RangeError {}))
+    }
 }

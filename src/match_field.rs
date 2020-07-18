@@ -1,6 +1,9 @@
 use crate::field::{split_line_quotes, split_line_regex_quotes};
 use regex::{Regex, RegexSetBuilder};
 
+use crate::error;
+use error::RecutError;
+
 enum DelimiterType<'a> {
     String(&'a str),
     Regex(&'a Regex),
@@ -10,7 +13,7 @@ pub fn parse_match_indices(
     match_str: &str,
     input_line: &str,
     delimiter: &str,
-) -> (Vec<String>, Vec<usize>) {
+) -> Result<(Vec<String>, Vec<usize>), RecutError> {
     parse_match(match_str, input_line, &DelimiterType::String(delimiter))
 }
 
@@ -18,7 +21,7 @@ pub fn parse_match_indices_regex(
     match_str: &str,
     input_line: &str,
     delimiter: &Regex,
-) -> (Vec<String>, Vec<usize>) {
+) -> Result<(Vec<String>, Vec<usize>), RecutError> {
     parse_match(match_str, input_line, &DelimiterType::Regex(delimiter))
 }
 
@@ -26,7 +29,7 @@ fn parse_match(
     match_str: &str,
     input_line: &str,
     delim: &DelimiterType,
-) -> (Vec<String>, Vec<usize>) {
+) -> Result<(Vec<String>, Vec<usize>), RecutError> {
     let match_split = split_line_quotes(match_str, ",");
 
     let line_split = match delim {
@@ -36,8 +39,7 @@ fn parse_match(
 
     let set = RegexSetBuilder::new(match_split.iter())
         .case_insensitive(true)
-        .build()
-        .unwrap();
+        .build()?;
 
     let mut indices = Vec::with_capacity(match_split.len());
     let mut first_line_split = Vec::with_capacity(match_split.len());
@@ -49,6 +51,5 @@ fn parse_match(
         }
     }
 
-    //println!("{:?} {:?},{:?}", first_line_split, indices, delimiter);
-    (first_line_split, indices)
+    Ok((first_line_split, indices))
 }
