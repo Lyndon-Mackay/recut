@@ -19,7 +19,7 @@ A utf-8, regular expression delimiter implementation of the UNIX tool CUT. With 
 
 
 ## Current state
-Please note this is not ready for actual use yet. Currently it does no error checking beyond unwrapping and debug messages are still being printed. Code is not really commented as there is lots of functions being duplicated with no decision being made on whether the functions are similar enough to be abstracted away. 
+Please note this is not ready for actual use yet. Currently debug messages are still being printed. Code is not really commented as there is lots of functions being duplicated with no decision being made on whether the functions are similar enough to be abstracted away. 
 
 Inferring the delimiter only does single characters, it will never infer delimiters such as `\w+`. This may change in the future to handle multiple tabs and spaces as one regex delimiter.
 
